@@ -1,0 +1,41 @@
+{
+  "Files": [
+    {
+      "Id": "C:\\Users\\ary\\Desktop\\Skole\\BenzinPriser\\BenzinPriser\\obj\\Debug\\net8.0\\scopedcss\\projectbundle\\BenzinPriser.bundle.scp.css",
+      "PackagePath": "staticwebassets\\BenzinPriser.bundle.scp.css"
+    },
+    {
+      "Id": "C:\\Users\\ary\\Desktop\\Skole\\BenzinPriser\\BenzinPriser\\wwwroot\\app.css",
+      "PackagePath": "staticwebassets\\app.css"
+    },
+    {
+      "Id": "C:\\Users\\ary\\Desktop\\Skole\\BenzinPriser\\BenzinPriser\\wwwroot\\bootstrap\\bootstrap.min.css",
+      "PackagePath": "staticwebassets\\bootstrap\\bootstrap.min.css"
+    },
+    {
+      "Id": "C:\\Users\\ary\\Desktop\\Skole\\BenzinPriser\\BenzinPriser\\wwwroot\\bootstrap\\bootstrap.min.css.map",
+      "PackagePath": "staticwebassets\\bootstrap\\bootstrap.min.css.map"
+    },
+    {
+      "Id": "C:\\Users\\ary\\Desktop\\Skole\\BenzinPriser\\BenzinPriser\\wwwroot\\favicon.png",
+      "PackagePath": "staticwebassets\\favicon.png"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.BenzinPriser.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.BenzinPriser.props",
+      "PackagePath": "build\\BenzinPriser.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.BenzinPriser.props",
+      "PackagePath": "buildMultiTargeting\\BenzinPriser.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.BenzinPriser.props",
+      "PackagePath": "buildTransitive\\BenzinPriser.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

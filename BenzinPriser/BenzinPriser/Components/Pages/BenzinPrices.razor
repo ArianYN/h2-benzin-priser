@@ -1,0 +1,271 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using BlazorBootstrap;
+@using Newtonsoft.Json;
+
+<PageTitle>Benzin Priser</PageTitle>
+
+<LineChart @ref="benzinChart"/>
+
+@if (LatestPrice != null && LatestDate != null)
+{
+    <div class="alert" style="background-color: #48a21b;">
+        <strong>Latest Price!</strong> @LatestPrice DKK as of @LatestDate
+    </div>
+    
+    <div class="alert" style="background-color: #1aaec9;">
+        <strong>Average:</strong> @Average DK  - <strong>Median:</strong> @Median DKK - <strong>Variance:</strong> @Variance DKK
+    </div>
+}
+
+<br/>
+<table>
+    <tr>
+        @foreach (int year in ListOfYears)
+        {
+            <th>@year-@(year+1)</th>
+        }
+    </tr>
+</table>
+
+@code
+{
+    public class PriceData
+    {
+        public string Price { get; set; }
+        public string Date { get; set; }
+    }
+
+    private double? LatestPrice = null;
+    private string LatestDate = null;
+    private double? Variance = null;
+    private double? Average = null;
+    private double? Median = null;
+
+    private List<int> ListOfYears = new List<int>();
+    private Dictionary<string, List<double?>> YearPriceListDict = new Dictionary<string, List<double?>>();
+    private Dictionary<string, double?> YearPriceDict = new Dictionary<string, double?>();
+    private List<double> YearInflationPercentage = new List<double>();
+    
+    private LineChart benzinChart = default!;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RenderBenzinPrices();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task RenderBenzinPrices()
+    {
+        List<PriceData> dataList = await ProcessDataFromApi();
+        List<double?> priceList = new List<double?>();
+        List<string> dateList = new List<string>();
+
+        foreach (PriceData dataObj in dataList)
+        {
+            priceList.Add(double.Parse(dataObj.Price, System.Globalization.CultureInfo.InvariantCulture));
+            dateList.Add(dataObj.Date);
+        }
+
+        await CalculateAvgMedianVariance(priceList);
+        StateHasChanged();
+        
+        ChartData priceData = new ChartData 
+        {
+            Labels = dateList, // The list of strings with all the dates from the selected nodes
+            Datasets = new List<IChartDataset>()
+            {
+                new LineChartDataset()
+                {
+                    Label = "Benzin Price (DKK)",
+                    Data = priceList, // The list of doubles with all the prices
+                    BackgroundColor = "rgb(88, 80, 141)",
+                    BorderColor = "rgb(88, 80, 141)",
+                    BorderWidth = 2,
+                    HoverBorderWidth = 4,
+                                        
+                }
+            }
+        };
+        priceData.Datasets.Add(new LineChartDataset()
+        {
+            Label = "Lineær Regression",
+            Data = await CalculateTrendline(priceList),
+            BackgroundColor = "rgba(255, 99, 132, 0.2)",
+            BorderColor = "rgba(255, 99, 132, 1)",
+            BorderDash = new List<double> { 5, 5 },
+            BorderWidth = 2,
+            PointRadius = new List<double>(0)
+        });
+
+        LineChartOptions options = new LineChartOptions();
+        options.Interaction.Mode = InteractionMode.Index;
+        
+        options.Plugins.Title!.Text = "Benzin Priser";
+        options.Plugins.Title.Display = true;
+        options.Plugins.Title.Font = new ChartFont { Size = 20 };
+
+        options.Responsive = true;
+        
+        options.Scales.X!.Title = new ChartAxesTitle { Text = "Datoer", Display = true };
+        options.Scales.Y!.Title = new ChartAxesTitle { Text = "Priser", Display = true };
+
+        await benzinChart.InitializeAsync(priceData, options);
+    }
+
+    private async Task<List<PriceData>> ProcessDataFromApi()
+    {
+        List<PriceData> RawPriceDataList = await RetrieveRawApiData("benzin");
+        List<PriceData> HandledPriceDataList = new List<PriceData>();
+
+        LatestDate = RawPriceDataList.Last().Date;
+        LatestPrice = double.Parse(RawPriceDataList.Last().Price, System.Globalization.CultureInfo.InvariantCulture);
+        
+        bool fourthMonthTaken = false;
+        bool eighthMonthTaken = false;
+        bool lastMonthTaken = false;
+        
+        foreach (PriceData dataObj in RawPriceDataList)
+        {
+            int lastYear = int.Parse(dataObj.Date.Split("-")[0]);
+            
+            if (!ListOfYears.Contains(lastYear))
+            {
+                ListOfYears.Add(lastYear);
+                YearPriceListDict.Add(lastYear.ToString(), new List<double?>());
+            }
+
+            YearPriceListDict[lastYear.ToString()].Add(double.Parse(dataObj.Price, System.Globalization.CultureInfo.InvariantCulture));
+            
+            string date = dataObj.Date;
+            bool isFourthMonth = date.Split("-")[1].Contains("04");
+            bool isEighthMonth = date.Split("-")[1].Contains("08");
+            bool isLastMonth = date.Split("-")[1].Contains("12");
+            
+            if (isFourthMonth && !fourthMonthTaken) // if it is fourth month of the year and it's not already taken
+            {
+                HandledPriceDataList.Add(dataObj);
+                fourthMonthTaken = true;
+                
+            } else if (isEighthMonth && !eighthMonthTaken)  // if it is sixth month of the year and it's not already taken
+            {
+                HandledPriceDataList.Add(dataObj);
+                eighthMonthTaken = true;
+                
+            } else if (isLastMonth && !lastMonthTaken)
+            {
+                HandledPriceDataList.Add(dataObj);
+                lastMonthTaken = true;
+                
+            } else if (fourthMonthTaken && eighthMonthTaken && lastMonthTaken)
+            {
+                fourthMonthTaken = false;
+                eighthMonthTaken = false;
+                lastMonthTaken = false;
+            }
+        }
+
+        foreach (KeyValuePair<string, List<double?>> year in YearPriceListDict)
+        {
+            double? avgPrice = 0;
+            double? sum = 0;
+            
+                foreach (double? price in year.Value)
+                {
+                    sum += price;
+                }
+
+                avgPrice = sum / year.Value.Count();
+            
+            YearPriceDict.Add(year.ToString(), avgPrice); // Now each year has its avg price.
+            // TODO Calculate percentage change from each year
+        }
+        return HandledPriceDataList;
+    }
+
+    private async Task<List<PriceData>> RetrieveRawApiData(string fueltype)
+    {
+        string apiUrl = string.Empty;
+        switch (fueltype)
+        {
+            case "benzin":
+                apiUrl = "https://opgaver.mercantec.tech/Opgaver/Miles95";
+                break;
+            case "diesel":
+                apiUrl = "https://opgaver.mercantec.tech/Opgaver/Diesel";
+                break;
+            default:
+                break;
+        }
+        
+        HttpClient apiClient = new HttpClient();
+        string apiResponse = await apiClient.GetStringAsync(apiUrl);
+        
+        List<PriceData> RawPriceDataList = JsonConvert.DeserializeObject<List<PriceData>>(apiResponse);
+
+        return RawPriceDataList;
+    }
+
+    private async Task<List<double?>> CalculateTrendline(List<double?> priceList)
+    {
+        double[] xValues = Enumerable.Range(0, priceList.Count()).Select(i => (double)i).ToArray();
+        double?[] yValues = priceList.ToArray();
+
+        double xAvg = xValues.Average();
+        double? yAvg = yValues.Average();
+
+        double? numerator = xValues.Zip(yValues, (x, y) => (x - xAvg) * (y - yAvg)).Sum();
+        double denominator = xValues.Sum(x => (x - xAvg) * (x - xAvg));
+
+        double? slope = numerator / denominator;
+        double? intercept = yAvg - slope * xAvg;
+
+        List<double?> trendlineData = xValues.Select(x => slope * x + intercept).ToList();
+
+        return trendlineData;
+    }
+    
+    private async Task CalculateAvgMedianVariance(List<double?> priceList)
+    {
+        double? sum = 0;
+        double? avg = 0;
+        double? variance = 0;
+        for (int i = 0; i < priceList.Count; i++)
+        {
+            sum += priceList[i];
+        }
+        avg = sum / priceList.Count;
+
+        if (priceList.Count > 1)
+        {
+            foreach (double? value in priceList)
+            {
+                variance += Math.Pow((double)value - (double)avg, 2.0);
+            }
+        }
+
+        variance = variance / priceList.Count;
+
+        Variance = Math.Round((double)variance, 2);
+        Average = Math.Round((double)avg, 2);
+        Median = Math.Round((double)priceList[priceList.Count/2], 2); // This might be wrong
+
+    }
+}
+
+<style>
+    .alert {
+        padding: 20px;
+        color: white;
+    }
+
+    td, th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 8px;
+    }
+</style>
+    

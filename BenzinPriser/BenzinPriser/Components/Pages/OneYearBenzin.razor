@@ -1,0 +1,138 @@
+﻿@page "/oneyearbenzin"
+@rendermode InteractiveServer
+@using System.Globalization
+@using BlazorBootstrap;
+@using Newtonsoft.Json;
+
+<PageTitle>Benzin</PageTitle>
+<h1>Benzin Priser det sidste år:</h1>
+
+<LineChart @ref="benzinChart"/>
+
+@if (HighestPrice != null && LowestPrice != null)
+{
+    <div class="alert" style="background-color: #1aaec9;">
+        <strong>Loweste Price:</strong> @LowestPrice DKK - <strong>Highest Price:</strong> @HighestPrice DKK
+    </div>
+}
+
+@code {
+    public class PriceData
+    {
+        public string Price { get; set; }
+        public string Date { get; set; }
+    }
+
+    private double? HighestPrice;
+    private double? LowestPrice;
+    
+    private LineChart benzinChart = default!;
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RenderBenzinPrices();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+    
+    private async Task RenderBenzinPrices()
+    {
+        List<PriceData> dataList = await ProcessDataFromApi();
+        List<double?> priceList = new List<double?>();
+        List<string> dateList = new List<string>();
+
+        foreach (PriceData dataObj in dataList)
+        {
+            priceList.Add(double.Parse(dataObj.Price, System.Globalization.CultureInfo.InvariantCulture));
+            dateList.Add(dataObj.Date);
+        }
+
+        HighestPrice = priceList.Max();
+        LowestPrice = priceList.Min();
+        StateHasChanged();
+        
+        ChartData priceData = new ChartData 
+        {
+            Labels = dateList,
+            Datasets = new List<IChartDataset>()
+            {
+                new LineChartDataset()
+                {
+                    Label = "Benzin Price (DKK)",
+                    Data = priceList,
+                    BackgroundColor = "rgb(88, 80, 141)",
+                    BorderColor = "rgb(88, 80, 141)",
+                    BorderWidth = 2,
+                    HoverBorderWidth = 4,
+                                        
+                }
+            }
+        };
+        
+        LineChartOptions options = new LineChartOptions();
+        options.Interaction.Mode = InteractionMode.Index;
+        
+        options.Plugins.Title!.Text = "Benzin Priser";
+        options.Plugins.Title.Display = true;
+        options.Plugins.Title.Font = new ChartFont { Size = 20 };
+
+        options.Responsive = true;
+        
+        options.Scales.X!.Title = new ChartAxesTitle { Text = "Datoer", Display = true };
+        options.Scales.Y!.Title = new ChartAxesTitle { Text = "Priser", Display = true };
+
+        await benzinChart.InitializeAsync(priceData, options);
+    }
+    
+     private async Task<List<PriceData>> ProcessDataFromApi()
+    {
+        List<PriceData> RawPriceDataList = await RetrieveRawApiData();
+        List<PriceData> HandledPriceDataList = new List<PriceData>();
+        
+        int objTracker = 1; // When this reaches 10, it resets to 0 and allows 1 item to be added to the list
+
+        foreach (PriceData dataObj in RawPriceDataList)
+        {
+            DateTime dataObjDate = DateTime.ParseExact(dataObj.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+            TimeSpan difference = DateTime.Today - dataObjDate;
+
+            if (difference.TotalDays <= 52 * 7) // Check if it is within the last 52 weeks
+            {
+                if (objTracker == 7) // To limit amounts of objects 1 per week
+                {
+                    HandledPriceDataList.Add(dataObj);
+                    objTracker = 1;
+                }
+                else
+                {
+                    objTracker++;
+                }
+            }
+        }
+        
+        return HandledPriceDataList;
+    }
+
+    private async Task<List<PriceData>> RetrieveRawApiData()
+    {
+        List<PriceData> RawPriceDataList = new List<PriceData>();
+        
+        string apiUrl = "https://opgaver.mercantec.tech/Opgaver/Miles95";
+        HttpClient apiClient = new HttpClient();
+        string apiResponse = await apiClient.GetStringAsync(apiUrl);
+        
+        RawPriceDataList = JsonConvert.DeserializeObject<List<PriceData>>(apiResponse);
+
+        return RawPriceDataList;
+    }
+}
+
+
+<style>
+    .alert {
+        padding: 20px;
+        color: white;
+    }
+</style>
